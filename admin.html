@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Users Data</title>
+    <!-- ZIP फाइल जनरेट करने की लाइब्रेरी -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: #f1f5f9;
+            color: #1e293b;
+            padding: 20px;
+        }
+        .header {
+            max-width: 1100px;
+            margin: 0 auto 20px auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+        }
+        .header h2 {
+            color: #4f46e5;
+            font-size: 22px;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .search-input {
+            padding: 10px 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 240px;
+            outline: none;
+        }
+        .search-input:focus {
+            border-color: #4f46e5;
+        }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            color: white;
+        }
+        .btn-excel { background: #16a34a; }
+        .btn-excel:hover { background: #15803d; }
+        .btn-refresh { background: #4f46e5; }
+        .btn-refresh:hover { background: #4338ca; }
+        .btn-zip { background: #ea580c; }
+        .btn-zip:hover { background: #c2410c; }
+        .btn-delete {
+            background: #ef4444;
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .btn-delete:hover { background: #dc2626; }
+
+        .table-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            overflow-x: auto;
+            padding: 15px;
+        }
+        .stats {
+            margin-bottom: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 750px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+        th {
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+        tr:hover {
+            background: #f8fafc;
+        }
+        .status-msg {
+            text-align: center;
+            padding: 30px;
+            font-weight: 600;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h2>🛡️ Admin Panel (Users Data)</h2>
+            <p style="font-size: 13px; color: #64748b;">Firebase में रजिस्टर्ड सभी यूजर्स की लिस्ट</p>
+        </div>
+        <div class="controls">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔍 नाम या मोबाइल नंबर खोजें...">
+            <button class="btn btn-refresh" onclick="loadUsers()">🔄 Refresh</button>
+            <button class="btn btn-excel" onclick="exportToCSV()">📊 Download Excel (CSV)</button>
+            <button class="btn btn-zip" onclick="downloadAdminZip()">📦 Download Admin ZIP</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="stats" id="totalCount">कुल यूजर्स: 0</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>पूरा नाम (Name)</th>
+                    <th>पिता का नाम (Father's Name)</th>
+                    <th>जन्म तिथि (DOB)</th>
+                    <th>मोबाइल नंबर (Mobile)</th>
+                    <th>ईमेल (Email)</th>
+                    <th>रजिस्ट्रेशन तारीख</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="userTableBody">
+                <tr>
+                    <td colspan="8" class="status-msg">⏳ डेटा लोड हो रहा है... कृपया अपनी Firebase Config डालें।</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+<!-- सुरक्षित (Secure) FIREBASE ADMIN SCRIPT -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCZHFSDBEWu1q_DsKNclp-aqSX2sULEJic",
+  authDomain: "llogin-fbc58.firebaseapp.com",
+  projectId: "llogin-fbc58",
+  storageBucket: "llogin-fbc58.firebasestorage.app",
+  messagingSenderId: "217439993535",
+  appId: "1:217439993535:web:951ca8f63cfb35502ad00a",
+  measurementId: "G-PNEBMWMWZ7"
+};
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let allUsersData = [];
+
+    // चेक करें कि क्या Admin लॉग-इन है?
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            loadUsers(); // अगर लॉग-इन है तो डेटा लोड करें
+        } else {
+            // अगर लॉग-इन नहीं है तो ईमेल और पासवर्ड मांगें
+            const email = prompt("🔐 Admin Login: अपनी एडमिन ईमेल (Email) डालें:");
+            const pass = prompt("🔑 अपना एडमिन पासवर्ड (Password) डालें:");
+            if (email && pass) {
+                signInWithEmailAndPassword(auth, email, pass)
+                    .catch(err => alert("❌ गलत ईमेल या पासवर्ड: " + err.message));
+            }
+        }
+    });
+
+    window.loadUsers = async function() {
+        const tbody = document.getElementById('userTableBody');
+        tbody.innerHTML = `<tr><td colspan="8" class="status-msg">⏳ डेटा लोड हो रहा है...</td></tr>`;
+        allUsersData = [];
+
+        try {
+            const querySnapshot = await getDocs(collection(db, "users"));
+            querySnapshot.forEach((docSnap) => {
+                allUsersData.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            renderTable(allUsersData);
+        } catch (error) {
+            tbody.innerHTML = `<tr><td colspan="8" class="status-msg" style="color:#dc2626;">❌ Access Denied! केवल एडमिन ही यह डेटा देख सकता है।</td></tr>`;
+        }
+    };
+    
+    // (बाकी के renderTable, deleteUser, और exportToCSV फंक्शन वैसे ही रहेंगे)
+</script>
