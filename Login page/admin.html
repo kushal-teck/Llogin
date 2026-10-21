@@ -157,13 +157,13 @@
         </table>
     </div>
 
-<!-- सुरक्षित (Secure) FIREBASE ADMIN SCRIPT -->
+<!-- SECURE ADMIN LOGIN SCRIPT -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCZHFSDBEWu1q_DsKNclp-aqSX2sULEJic",
   authDomain: "llogin-fbc58.firebaseapp.com",
@@ -180,26 +180,59 @@ const firebaseConfig = {
 
     let allUsersData = [];
 
-    // चेक करें कि क्या Admin लॉग-इन है?
+    // चेक करें कि एडमिन लॉग-इन है या नहीं
     onAuthStateChanged(auth, (user) => {
         if (user) {
-            loadUsers(); // अगर लॉग-इन है तो डेटा लोड करें
+            // अगर लॉग-इन है, तो डेटा लोड करो
+            loadUsers();
         } else {
-            // अगर लॉग-इन नहीं है तो ईमेल और पासवर्ड मांगें
-            const email = prompt("🔐 Admin Login: अपनी एडमिन ईमेल (Email) डालें:");
-            const pass = prompt("🔑 अपना एडमिन पासवर्ड (Password) डालें:");
-            if (email && pass) {
+            // अगर लॉग-इन नहीं है, तो स्क्रीन पर ही लॉग-इन फॉर्म दिखाओ
+            document.querySelector('.table-container').innerHTML = `
+                <div style="max-width: 350px; margin: 40px auto; padding: 25px; background: #f8fafc; border-radius: 10px; border: 1px solid #cbd5e1; text-align: center;">
+                    <h3 style="margin-bottom: 15px; color: #4f46e5;">🔐 Admin Login Required</h3>
+                    <input type="email" id="adminEmail" placeholder="Admin Email" style="width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <input type="password" id="adminPass" placeholder="Password" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                    <button id="loginBtn" style="width: 100%; padding: 10px; background: #4f46e5; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Login</button>
+                    <p id="loginError" style="color: #dc2626; font-size: 13px; margin-top: 10px;"></p>
+                </div>
+            `;
+
+            document.getElementById('loginBtn').addEventListener('click', () => {
+                const email = document.getElementById('adminEmail').value;
+                const pass = document.getElementById('adminPass').value;
                 signInWithEmailAndPassword(auth, email, pass)
-                    .catch(err => alert("❌ गलत ईमेल या पासवर्ड: " + err.message));
-            }
+                    .catch(err => {
+                        document.getElementById('loginError').innerText = "❌ गलत ईमेल या पासवर्ड!";
+                    });
+            });
         }
     });
 
     window.loadUsers = async function() {
-        const tbody = document.getElementById('userTableBody');
-        tbody.innerHTML = `<tr><td colspan="8" class="status-msg">⏳ डेटा लोड हो रहा है...</td></tr>`;
-        allUsersData = [];
+        const container = document.querySelector('.table-container');
+        // टेबल स्ट्रक्चर वापस लाएं
+        container.innerHTML = `
+            <div class="stats" id="totalCount">कुल यूजर्स: 0</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>पूरा नाम (Name)</th>
+                        <th>पिता का नाम (Father's Name)</th>
+                        <th>जन्म तिथि (DOB)</th>
+                        <th>मोबाइल नंबर (Mobile)</th>
+                        <th>ईमेल (Email)</th>
+                        <th>रजिस्ट्रेशन तारीख</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody">
+                    <tr><td colspan="8" class="status-msg">⏳ डेटा लोड हो रहा है...</td></tr>
+                </tbody>
+            </table>
+        `;
 
+        allUsersData = [];
         try {
             const querySnapshot = await getDocs(collection(db, "users"));
             querySnapshot.forEach((docSnap) => {
@@ -207,9 +240,47 @@ const firebaseConfig = {
             });
             renderTable(allUsersData);
         } catch (error) {
-            tbody.innerHTML = `<tr><td colspan="8" class="status-msg" style="color:#dc2626;">❌ Access Denied! केवल एडमिन ही यह डेटा देख सकता है।</td></tr>`;
+            document.getElementById('userTableBody').innerHTML = `<tr><td colspan="8" class="status-msg" style="color:#dc2626;">❌ Access Denied! केवल एडमिन ही यह डेटा देख सकता है।</td></tr>`;
         }
     };
-    
-    // (बाकी के renderTable, deleteUser, और exportToCSV फंक्शन वैसे ही रहेंगे)
+
+    function renderTable(users) {
+        const tbody = document.getElementById('userTableBody');
+        const countElem = document.getElementById('totalCount');
+        if(countElem) countElem.innerText = `कुल यूजर्स: ${users.length}`;
+
+        if (users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="status-msg">📭 अभी तक कोई यूजर डेटा मौजूद नहीं है।</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = "";
+        users.forEach((user, index) => {
+            const regDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString('hi-IN') : 'N/A';
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${index + 1}</strong></td>
+                    <td>${user.fullName || '-'}</td>
+                    <td>${user.fatherName || '-'}</td>
+                    <td>${user.dob || '-'}</td>
+                    <td>${user.mobile || '-'}</td>
+                    <td>${user.email || '-'}</td>
+                    <td>${regDate}</td>
+                    <td><button class="btn btn-delete" onclick="deleteUser('${user.id}', '${user.fullName}')">🗑️ Delete</button></td>
+                </tr>
+            `;
+        });
+    }
+
+    window.deleteUser = async function(userId, userName) {
+        if (confirm(`क्या आप वाकई "${userName}" का डेटा डिलीट करना चाहते हैं?`)) {
+            try {
+                await deleteDoc(doc(db, "users", userId));
+                alert("✅ डेटा डिलीट हो गया!");
+                loadUsers();
+            } catch (error) {
+                alert("❌ त्रुटि: " + error.message);
+            }
+        }
+    };
 </script>
